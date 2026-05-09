@@ -1,0 +1,13 @@
+# OS garbage
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local secrets (if you ever add a config file)
+.env
+config.js

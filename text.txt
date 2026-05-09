@@ -1,0 +1,9 @@
+
+## 📄 License
+
+MIT – free for personal, educational, and commercial use.
+
+## 🙏 Acknowledgements
+
+- [SightEngine](https://sightengine.com) for the deepfake detection API
+- [Tabler Icons](https://tabler.io/icons) for icons
