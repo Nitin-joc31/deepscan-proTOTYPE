@@ -4,6 +4,8 @@
 
 DeepScan is an image deepfake analysis app. The browser sends an image to the same-origin ASP.NET Core API; the server calls SightEngine and returns its score, a threshold-based label, and the face count.
 
+The repository also includes the privacy-first [Cyber Safety Toolkit](cyber-safety-toolkit/), with a local password review, a k-anonymous breach lookup, and a cryptographically random passphrase generator.
+
 ## Run locally
 
 Requirements: .NET 10 SDK and SightEngine API credentials.

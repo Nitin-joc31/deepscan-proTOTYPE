@@ -47,13 +47,16 @@ app.Use(async (context, next) =>
     context.Response.Headers.XFrameOptions = "DENY";
     context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
     context.Response.Headers.ContentSecurityPolicy =
-        "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'self'; frame-ancestors 'none'";
+        "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline'; connect-src 'self' https://api.pwnedpasswords.com; form-action 'self'; base-uri 'self'; frame-ancestors 'none'";
     await next();
 });
 
 app.UseRateLimiter();
 app.MapGet("/", () => Results.File(
     Path.Combine(app.Environment.ContentRootPath, "index.html"),
+    "text/html; charset=utf-8"));
+app.MapGet("/cyber-safety-toolkit", () => Results.File(
+    Path.Combine(app.Environment.ContentRootPath, "cyber-safety-toolkit", "index.html"),
     "text/html; charset=utf-8"));
 app.MapGet("/api/health", (HttpContext context, IConfiguration configuration) =>
 {

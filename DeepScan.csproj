@@ -6,5 +6,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="index.html" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="cyber-safety-toolkit\**\*" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
