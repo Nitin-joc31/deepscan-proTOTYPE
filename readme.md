@@ -1,30 +1,62 @@
-# DeepScan – Real Deepfake Detector (SightEngine)
+# DeepScan
 
-A browser‑based deepfake detection tool that uses the **SightEngine API** (free tier) to analyse images for face‑swap and GAN‑generated content.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-✅ **Real API – not a fake demo**  
-✅ Works entirely in your browser – no backend required  
-✅ API keys stored locally (no server upload)
+DeepScan is an image deepfake analysis app. The browser sends an image to the same-origin ASP.NET Core API; the server calls SightEngine and returns its score, a threshold-based label, and the face count.
 
-## 🚀 Demo
+## Run locally
 
-Upload an image containing a face, and get:
-- Deepfake probability score (0–100%)
-- Forensic metrics and key findings
-- Downloadable report
+Requirements: .NET 10 SDK and SightEngine API credentials.
 
-## 🛠️ How to use
+Set `SIGHTENGINE_API_USER` and `SIGHTENGINE_API_SECRET` in the server process environment using a local secret manager or your IDE's environment settings (do not put real keys in source control or shell history), then run:
 
-1. Get your free API keys from [SightEngine](https://sightengine.com) (500 checks/month)
-2. Open `index.html` (or host on GitHub Pages)
-3. Paste your `api_user` and `api_secret` into the form, click **Save keys**
-4. Upload an image (JPG, PNG, WEBP)
-5. Click **Run deepfake analysis**
+```sh
+dotnet run
+```
 
-## ⚠️ Limitations
+On Windows PowerShell, you can enter the secret without echoing it or placing it in command history:
 
-- **Images only** – video deepfake detection would require a backend proxy
-- SightEngine works best on face‑swap deepfakes (e.g., StyleGAN, FaceSwap)
-- No detector is 100% accurate – use as one signal among many
+```powershell
+$env:SIGHTENGINE_API_USER = Read-Host "SightEngine API user"
+$secureSecret = Read-Host "SightEngine API secret" -AsSecureString
+$env:SIGHTENGINE_API_SECRET = [Net.NetworkCredential]::new("", $secureSecret).Password
+dotnet run
+Remove-Item Env:SIGHTENGINE_API_USER, Env:SIGHTENGINE_API_SECRET
+```
 
-## 📁 File structure
+Open the local URL printed by ASP.NET Core. The `/` route serves `index.html`; `/api/health` reports whether server credentials are configured. Credentials are never entered into or stored by the browser. The server sends them only to SightEngine.
+
+For a container deployment:
+
+```sh
+docker build -t deepscan .
+docker run --rm -p 8080:8080 -e SIGHTENGINE_API_USER -e SIGHTENGINE_API_SECRET deepscan
+```
+
+Set the two variables as secrets in your hosting platform rather than adding values to this repository or a Docker image. The app listens on port 8080 in the container.
+
+GitHub Pages is static hosting and cannot run the analysis API. Deploy the ASP.NET Core app (or its container) to a server that supports .NET 10. The previous GitHub Pages deployment is not a working scanner unless you also deploy a compatible same-origin API.
+
+## Security and privacy
+
+- SightEngine credentials remain in server environment configuration and are not sent to the browser.
+- Images are validated as JPEG, PNG, or WEBP, limited to 25 MB, and checked against their file signatures. The app does not keep uploads after request processing. ASP.NET Core can temporarily buffer multipart uploads to server storage; secure that storage and use a trusted host.
+- The scan endpoint is limited to 30 requests per minute per app instance. This in-memory global limit is a basic safeguard, not authentication or a distributed quota. Before making the service public, put it behind authentication and an edge or gateway with shared rate limits and abuse monitoring.
+- Use HTTPS in production. Do not expose SightEngine keys through source files, frontend settings, logs, or container build arguments.
+- The API returns a threshold-based label from the successful SightEngine score and face count. It does not create a heuristic score when the provider fails.
+
+## Limitations
+
+- Image analysis only; video is not supported.
+- SightEngine's output is probabilistic and not definitive. Treat it as one signal rather than proof of authenticity or manipulation.
+- Scans require server-side SightEngine credentials, a working network connection, and available provider quota.
+
+## Project files
+
+```text
+DeepScan.csproj   ASP.NET Core application
+Program.cs        Same-origin SightEngine proxy and validation
+index.html        Browser UI
+Dockerfile        Multi-stage container build
+README.md         Setup, deployment, and security notes
+```
