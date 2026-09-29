@@ -3,6 +3,8 @@ WORKDIR /src
 COPY DeepScan.csproj ./
 RUN dotnet restore
 COPY Program.cs index.html ./
+COPY cyber-safety-toolkit ./cyber-safety-toolkit
+COPY network-scanner ./network-scanner
 RUN dotnet publish DeepScan.csproj --configuration Release --no-restore --output /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0

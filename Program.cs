@@ -1,4 +1,8 @@
 using System.Net.Http.Headers;
+using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Http.Features;
@@ -36,6 +40,14 @@ builder.Services.AddRateLimiter(options =>
             AutoReplenishment = true
         });
     });
+    options.AddPolicy("network-scan", _ =>
+        RateLimitPartition.GetFixedWindowLimiter("network-scanner", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 3,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
 });
 
 var app = builder.Build();
@@ -58,6 +70,14 @@ app.MapGet("/", () => Results.File(
 app.MapGet("/cyber-safety-toolkit", () => Results.File(
     Path.Combine(app.Environment.ContentRootPath, "cyber-safety-toolkit", "index.html"),
     "text/html; charset=utf-8"));
+app.MapGet("/network-scanner", () => Results.File(
+    Path.Combine(app.Environment.ContentRootPath, "network-scanner", "index.html"),
+    "text/html; charset=utf-8"));
+app.MapGet("/api/network-scanner/status", (HttpContext context, IConfiguration configuration) =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    return NetworkScanner.GetStatus(configuration);
+});
 app.MapGet("/api/health", (HttpContext context, IConfiguration configuration) =>
 {
     var configured = !string.IsNullOrWhiteSpace(configuration["SIGHTENGINE_API_USER"]) &&
@@ -66,6 +86,7 @@ app.MapGet("/api/health", (HttpContext context, IConfiguration configuration) =>
     return Results.Ok(new { status = configured ? "ready" : "not-configured" });
 });
 app.MapPost("/api/analyze", AnalyzeAsync).RequireRateLimiting("scan");
+app.MapPost("/api/network-scan", NetworkScanner.ScanAsync).RequireRateLimiting("network-scan");
 
 app.Run();
 
@@ -355,6 +376,150 @@ static bool HasValidSignature(ReadOnlySpan<byte> header, (string Extension, byte
     }
 
     return header.StartsWith(signature.Bytes);
+}
+
+static class NetworkScanner
+{
+    private static readonly (int Port, string Service, string Guidance)[] Ports =
+    [
+        (21, "FTP", "Disable if unused; replace clear-text FTP with an encrypted alternative."),
+        (22, "SSH", "Restrict access, use key-based authentication, and keep the server updated."),
+        (23, "Telnet", "Telnet is clear-text; disable it and use a secure alternative."),
+        (80, "HTTP", "Use HTTPS for any service that handles sensitive information."),
+        (443, "HTTPS", "Verify the service requires current TLS and is intentionally exposed."),
+        (445, "SMB", "Restrict file sharing to trusted devices; keep SMB patched."),
+        (3306, "MySQL", "Keep database ports private and allow only required clients."),
+        (3389, "RDP", "Restrict remote desktop to trusted networks and require MFA."),
+        (5432, "PostgreSQL", "Keep database ports private and allow only required clients."),
+        (6379, "Redis", "Do not expose Redis to untrusted networks; require authentication."),
+        (8080, "HTTP alternate", "Verify the service is intended to be reachable from this network.")
+    ];
+
+    public static IResult GetStatus(IConfiguration configuration)
+    {
+        var targetConfigured = TryGetPrivateTarget(configuration["NETWORK_SCANNER_TARGET"], out _);
+        var tokenConfigured = configuration["NETWORK_SCANNER_TOKEN"] is { Length: >= 32 };
+        return Results.Ok(new
+        {
+            configured = targetConfigured && tokenConfigured,
+            targetConfigured,
+            tokenConfigured,
+            portsChecked = Ports.Length,
+            scope = "one administrator-configured private IPv4 address"
+        });
+    }
+
+    public static async Task<IResult> ScanAsync(
+        HttpContext context,
+        IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+
+        var expectedToken = configuration["NETWORK_SCANNER_TOKEN"];
+        if (string.IsNullOrEmpty(expectedToken) || expectedToken.Length < 32)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Scanner is not configured",
+                detail: "The administrator must configure a private target and a scan token of at least 32 characters.");
+        }
+
+        if (!AuthenticationHeaderValue.TryParse(context.Request.Headers.Authorization, out var authorization) ||
+            !string.Equals(authorization.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrEmpty(authorization.Parameter) ||
+            !TokenMatches(expectedToken, authorization.Parameter))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "Scanner authorization required",
+                detail: "Enter the scan token configured by the service administrator.");
+        }
+
+        if (!TryGetPrivateTarget(configuration["NETWORK_SCANNER_TARGET"], out var target))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "Scanner target is not configured",
+                detail: "Configure one administrator-authorized private IPv4 target.");
+        }
+
+        var results = new List<PortResult>(Ports.Length);
+        foreach (var (port, service, guidance) in Ports)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(await CheckPortAsync(target, port, service, guidance, cancellationToken));
+        }
+
+        return Results.Ok(new
+        {
+            target = target.ToString(),
+            checkedAtUtc = DateTimeOffset.UtcNow,
+            mode = "TCP connect only; no exploit, authentication attempt, or service banner collection",
+            results
+        });
+    }
+
+    private static async Task<PortResult> CheckPortAsync(
+        IPAddress target,
+        int port,
+        string service,
+        string guidance,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(500));
+        using var client = new TcpClient(AddressFamily.InterNetwork);
+        try
+        {
+            await client.ConnectAsync(target, port, timeout.Token);
+            return new PortResult(port, service, "open", guidance);
+        }
+        catch (SocketException)
+        {
+            return new PortResult(port, service, "closed-or-filtered", null);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new PortResult(port, service, "timeout-or-filtered", null);
+        }
+        catch (IOException)
+        {
+            return new PortResult(port, service, "closed-or-filtered", null);
+        }
+    }
+
+    private static bool TokenMatches(string expected, string provided)
+    {
+        var expectedHash = SHA256.HashData(Encoding.UTF8.GetBytes(expected));
+        var providedHash = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
+        return CryptographicOperations.FixedTimeEquals(expectedHash, providedHash);
+    }
+
+    private static bool TryGetPrivateTarget(string? configured, out IPAddress target)
+    {
+        target = IPAddress.None;
+        if (!IPAddress.TryParse(configured, out var parsed) ||
+            parsed.AddressFamily != AddressFamily.InterNetwork)
+        {
+            return false;
+        }
+
+        var bytes = parsed.GetAddressBytes();
+        var isLoopback = bytes[0] == 127;
+        var isPrivate = bytes[0] == 10 ||
+                        bytes[0] == 172 && bytes[1] is >= 16 and <= 31 ||
+                        bytes[0] == 192 && bytes[1] == 168;
+        if (!isLoopback && !isPrivate)
+        {
+            return false;
+        }
+
+        target = parsed;
+        return true;
+    }
+
+    private sealed record PortResult(int Port, string Service, string State, string? Guidance);
 }
 
 static class AppLimits

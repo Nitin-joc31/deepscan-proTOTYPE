@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="theme-color" content="#10141d"/>
+  <meta name="description" content="A low-impact TCP exposure check for one administrator-configured private host you are authorized to assess."/>
+  <title>Authorized Network Exposure Scanner</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #10141d;
+      --panel: #181e29;
+      --panel-raised: #1e2633;
+      --line: #303a49;
+      --text: #edf2f8;
+      --muted: #aab6c5;
+      --subtle: #7e8b9b;
+      --green: #55d6a1;
+      --amber: #ffca69;
+      --red: #ff8188;
+      --blue: #88bcff;
+      --radius: 16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      background: radial-gradient(ellipse at 70% 0%, rgba(51,92,139,.2), transparent 42rem), var(--bg);
+      color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    a { color: var(--blue); }
+    a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+    .page { width: min(920px, calc(100% - 36px)); margin: auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 22px 0; border-bottom: 1px solid var(--line); }
+    .brand { font-weight: 750; letter-spacing: .04em; }
+    .mark { margin-right: 9px; color: var(--green); }
+    header a { color: var(--muted); text-decoration: none; font-size: 14px; }
+    main { padding: 48px 0 72px; }
+    .eyebrow { color: var(--amber); font-size: 12px; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
+    h1 { margin: 12px 0; font-size: clamp(34px, 7vw, 56px); line-height: 1.08; letter-spacing: -.04em; }
+    .intro { max-width: 720px; margin: 15px 0 25px; color: var(--muted); font-size: 17px; }
+    .notice { display: flex; gap: 12px; padding: 16px 18px; border: 1px solid rgba(255,202,105,.34); border-radius: 12px; background: rgba(255,202,105,.07); color: var(--muted); font-size: 14px; }
+    .notice strong { color: var(--text); }
+    .notice-mark { color: var(--amber); font-size: 19px; line-height: 1.4; }
+    .card { margin-top: 20px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: rgba(24,30,41,.94); box-shadow: 0 18px 60px rgba(0,0,0,.16); }
+    h2 { margin: 0 0 7px; font-size: 19px; }
+    .copy { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+    .scope { margin: 14px 0; padding: 13px 15px; border-radius: 9px; background: #111721; color: var(--muted); font-size: 14px; }
+    .scope[data-state="ready"] { color: var(--green); }
+    .scope[data-state="bad"] { color: var(--amber); }
+    label { display: block; margin: 16px 0 7px; font-size: 13px; font-weight: 700; }
+    input[type="password"] { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: #111721; color: var(--text); font: 15px ui-monospace, Consolas, monospace; }
+    .authorize { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; color: var(--muted); font-size: 14px; }
+    .authorize input { width: 18px; height: 18px; flex: 0 0 auto; margin-top: 3px; accent-color: #27866c; }
+    button { min-height: 44px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 14px; background: var(--panel-raised); color: var(--text); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+    button:hover:not(:disabled) { border-color: var(--blue); }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    .primary { width: 100%; border-color: transparent; background: #216c58; }
+    .primary:hover:not(:disabled) { background: #27866c; }
+    .status { min-height: 25px; margin: 15px 0 0; color: var(--muted); font-size: 14px; }
+    .status[data-state="good"] { color: var(--green); }
+    .status[data-state="warn"] { color: var(--amber); }
+    .status[data-state="bad"] { color: var(--red); }
+    .results { margin-top: 22px; }
+    .results h2 { margin-bottom: 12px; }
+    .result-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+    .result { display: grid; grid-template-columns: 74px 120px 1fr; gap: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 9px; background: #141a24; font-size: 13px; }
+    .result strong { font-variant-numeric: tabular-nums; }
+    .result [data-open="true"] { color: var(--amber); font-weight: 750; }
+    .result [data-open="false"] { color: var(--subtle); }
+    .guidance { color: var(--muted); }
+    .fineprint { margin-top: 15px; color: var(--subtle); font-size: 12px; }
+    footer { padding: 20px 0 30px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 12px; }
+    @media(max-width: 620px) { .result { grid-template-columns: 65px 1fr; } .guidance { grid-column: 1 / -1; } .card { padding: 19px; } main { padding-top: 34px; } }
+    @media(prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="brand"><span class="mark" aria-hidden="true">◆</span>NETWORK EXPOSURE CHECK</div>
+      <a href="../">Back to DeepScan</a>
+    </header>
+    <main>
+      <div class="eyebrow">Defensive · Fixed target · No exploits</div>
+      <h1>Review your network exposure.</h1>
+      <p class="intro">Check a small set of common TCP ports on one private IPv4 address explicitly configured by the service operator.</p>
+      <div class="notice" role="note">
+        <span class="notice-mark" aria-hidden="true">!</span>
+        <div><strong>Authorization required.</strong> The scan runs from the server, not your device. Use only a host and network you own or have explicit permission to assess. This tool attempts TCP connections only; it does not exploit services, try credentials, or collect banners.</div>
+      </div>
+      <section class="card" aria-labelledby="scannerTitle">
+        <h2 id="scannerTitle">Authorized host scan</h2>
+        <p class="copy">The host is fixed by the operator. You cannot enter a target or scan a range.</p>
+        <div class="scope" id="scopeStatus" role="status" aria-live="polite">Checking scanner configuration…</div>
+        <label for="scanToken">Administrator-provided scan token</label>
+        <input id="scanToken" type="password" autocomplete="off" spellcheck="false" aria-describedby="tokenHelp"/>
+        <div class="authorize">
+          <input id="authorization" type="checkbox"/>
+          <label for="authorization">I own this host or have explicit authorization to check its network exposure.</label>
+        </div>
+        <button class="primary" id="scanButton" type="button" disabled>Check configured host</button>
+        <p class="status" id="scanStatus" role="status" aria-live="polite"></p>
+        <p class="fineprint" id="tokenHelp">The token is sent only to this server over the same-origin API, used for this request, and cleared from the input when the scan completes. Use HTTPS and an access-controlled deployment.</p>
+        <div class="results" id="resultsPanel" hidden>
+          <h2>TCP port results</h2>
+          <p class="copy" id="scanSummary"></p>
+          <ul class="result-list" id="resultList"></ul>
+          <p class="fineprint">An open port means the TCP connection was accepted; it does not confirm a vulnerability. Closed and timeout results can be affected by firewalls. Review open services and restrict access if they are not needed.</p>
+        </div>
+      </section>
+    </main>
+    <footer>For authorized defensive inventory only. This is not a CVE scanner, vulnerability verdict, or penetration test. Results are limited to the server’s network path and may not match what an external user can reach.</footer>
+  </div>
+  <script>
+    'use strict';
+
+    const scopeStatus = document.getElementById('scopeStatus');
+    const scanButton = document.getElementById('scanButton');
+    const scanToken = document.getElementById('scanToken');
+    const authorization = document.getElementById('authorization');
+    const scanStatus = document.getElementById('scanStatus');
+    let scannerConfigured = false;
+
+    function setStatus(message, state = '') {
+      scanStatus.textContent = message;
+      scanStatus.dataset.state = state;
+    }
+
+    async function checkConfiguration() {
+      try {
+        const response = await fetch('../api/network-scanner/status', {
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        if (!response.ok) throw new Error('Could not read scanner configuration.');
+        const data = await response.json();
+        scannerConfigured = data.configured === true;
+        if (scannerConfigured) {
+          scopeStatus.textContent = `Ready: one operator-configured private IPv4 host; ${data.portsChecked} fixed TCP ports; maximum 3 scans per minute.`;
+          scopeStatus.dataset.state = 'ready';
+        } else {
+          scopeStatus.textContent = 'Scanner is not configured. The operator must set one private target and a 32+ character secret token on the server.';
+          scopeStatus.dataset.state = 'bad';
+        }
+      } catch {
+        scopeStatus.textContent = 'Scanner service is unavailable. Run the app server and try again.';
+        scopeStatus.dataset.state = 'bad';
+      }
+      updateButton();
+    }
+
+    function updateButton() {
+      scanButton.disabled = !scannerConfigured || !authorization.checked || scanToken.value.length < 32 || scanButton.dataset.busy === 'true';
+    }
+
+    function renderResults(data) {
+      const list = document.getElementById('resultList');
+      list.replaceChildren();
+      for (const item of data.results) {
+        const row = document.createElement('li');
+        row.className = 'result';
+        const port = document.createElement('strong');
+        port.textContent = String(item.port);
+        const service = document.createElement('span');
+        service.textContent = item.service;
+        const state = document.createElement('span');
+        const isOpen = item.state === 'open';
+        state.dataset.open = String(isOpen);
+        state.textContent = item.state;
+        const guidance = document.createElement('span');
+        guidance.className = 'guidance';
+        guidance.textContent = isOpen ? item.guidance || 'Review whether this service needs to be accessible.' : 'No TCP connection was confirmed.';
+        row.append(port, service, state, guidance);
+        list.append(row);
+      }
+      const timestamp = new Date(data.checkedAtUtc);
+      document.getElementById('scanSummary').textContent =
+        `Configured host ${data.target} · ${timestamp.toLocaleString()} · ${data.mode}`;
+      document.getElementById('resultsPanel').hidden = false;
+    }
+
+    async function runScan() {
+      if (scanButton.disabled || scanButton.dataset.busy === 'true') return;
+      const token = scanToken.value;
+      scanButton.dataset.busy = 'true';
+      updateButton();
+      scanToken.value = '';
+      setStatus('Checking only the configured host and fixed TCP ports…');
+      document.getElementById('resultsPanel').hidden = true;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12000);
+      try {
+        const response = await fetch('../api/network-scan', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          throw new Error(`The scanner returned an unreadable response (HTTP ${response.status}).`);
+        }
+        if (!response.ok) {
+          throw new Error(typeof data.detail === 'string'
+            ? data.detail
+            : `Scan failed (HTTP ${response.status}).`);
+        }
+        if (!Array.isArray(data.results) || !data.results.every(item =>
+          Number.isInteger(item.port) && typeof item.service === 'string' &&
+          typeof item.state === 'string' && ['open', 'closed-or-filtered', 'timeout-or-filtered'].includes(item.state))) {
+          throw new Error('The scanner returned an invalid result; no reliable report is available.');
+        }
+        renderResults(data);
+        setStatus('Scan complete. Review any open services and confirm they are intentional.', 'good');
+      } catch (error) {
+        const message = error.name === 'AbortError'
+          ? 'The scan timed out. No result is available; retry later.'
+          : error instanceof TypeError
+            ? 'Could not connect to the scanner service. Check the connection and retry.'
+            : error.message || 'The scan failed. No result is available.';
+        setStatus(message, 'warn');
+      } finally {
+        clearTimeout(timeout);
+        scanToken.value = '';
+        scanButton.dataset.busy = 'false';
+        updateButton();
+      }
+    }
+
+    scanToken.addEventListener('input', updateButton);
+    authorization.addEventListener('change', updateButton);
+    scanButton.addEventListener('click', runScan);
+    checkConfiguration();
+  </script>
+</body>
+</html>
