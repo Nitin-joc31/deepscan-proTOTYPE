@@ -75,3 +75,19 @@ README.md         Setup, deployment, and security notes
 ```
 
 See [network scanner setup and safety scope](network-scanner/README.md) for its operator-only configuration.
+
+## Build and publish
+
+Install the .NET 10 SDK, then run:
+
+```sh
+dotnet build --configuration Release
+dotnet publish --configuration Release --output ./publish
+```
+
+The GitHub Actions workflow runs these commands for pushes and pull requests, then starts the published app and checks that the home page, both toolkit pages, and health/configuration endpoints respond.
+
+## Acknowledgements
+
+- [SightEngine](https://sightengine.com) for the deepfake detection API.
+- [Tabler Icons](https://tabler.io/icons) for icons.
